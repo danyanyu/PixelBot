@@ -265,11 +265,11 @@ def pixelate(pic, psize=16):
 
 @njit
 def upscale(p, factor=2):
-    x, y,z = p.shape
-    res = np.zeros((factor*x,factor*y,z),dtype="uint8")
+    x, y, z = p.shape
+    res = np.zeros((factor*x,factor*y, z), dtype="uint8")
     for i in prange(x):
         for j in range(y):
-            res[factor*i:factor*(i+1),factor*j:factor*(j+1),:]+=p[i,j,:z]
+            res[factor*i:factor*(i+1),factor*j:factor*(j+1),:]+=p[i,j,:]
     return res
 
 @njit
@@ -409,6 +409,41 @@ def bayer4x4bw(p):
     return res
 
 
+def stripeshor(p, w = 1):
+    k = p.copy()
+    x, y,_=p.shape
+    for i in range(x//(w*3)):
+        k[3*w*i:3*w*i+w+1,:,:3]=np.array([0,0,0])
+    return k
+
+
+def stripeshorfact(p, w = 1, f = 0.5):
+    k = p.copy()
+    x, y,_=p.shape
+    for i in range(x//(w*2)):
+        k[2*w*i:2*w*i+w+1,:,:3]=f*k[2*w*i:2*w*i+w+1,:,:3]
+    return k
+
+
+def vhslike(pic, width=2):
+    p = stripeshor(pic, w=width)
+    return p
+
+
+def vhslikefact(pic, width=4, factor=0.75):
+    p = stripeshorfact(pic, w=width, f=factor)
+    return p
+
+def layer(p,offset):
+    x,y,_=p.shape
+    res=np.zeros((x,y+int(2*offset),3),dtype="uint8")
+    res[::,:y,1]=p[::,::,1]
+    res[::,:y,2]=p[::,::,2]
+    #res[::,offset:y+offset,1]=p[::,::,1]
+    res[::,offset:y+offset,0]=p[::,::,0]
+    #res[::,int(2*offset):,2]=p[::,::,2]
+    return res
+
 #end image processing part
 
 #bot part
@@ -423,18 +458,8 @@ palettes = ['none (Bayer4x4 algorithm)', 'aap', 'apollo', 'blessing', 'endesga64
 
 preview = {}
 
-bot = telebot.TeleBot("Token", parse_mode=None) # You can set parse_mode by default. HTML or MARKDOWN
+bot = telebot.TeleBot("TOKEN", parse_mode=None) # You can set parse_mode by default. HTML or MARKDOWN
 
-
-@bot.message_handler(func=lambda message: message.from_user.id not in user_choices)
-def check(message):
-    global user_choices, preview
-    user_choices[message.from_user.id] = ['0']
-    preview[message.from_user.id] = False
-    bot.send_message(message.from_user.id, "Welcome to PixelBot. "
-                                               "I can apply effects to your images and make them look like a pixel art."
-                                           " You can also try drawing-like effects, inspired by Acerola's YT videos."
-                                           " Formats such as PNG and JPG work best, consider converting your files beforehand.")
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
@@ -443,9 +468,23 @@ def send_welcome(message):
     user_choices[message.from_user.id] = ['0']
     preview[message.from_user.id] = False
     bot.send_message(message.from_user.id, "Welcome to PixelBot. "
-                                           "I can apply effects to your images and make them look like a pixel art."
+                                           "I can apply effects to your images: make them look like a pixel art or add some fancy glitches."
                                            " You can also try drawing-like effects, inspired by Acerola's YT videos."
-                                           " Formats such as PNG and JPG work best, consider converting your files beforehand.")
+                                           " Formats such as PNG and JPG work best, consider converting your files beforehand."
+                                           " You can resend files to me. Use menu button to view options.")
+
+
+@bot.message_handler(func=lambda message: message.from_user.id not in user_choices)
+def check(message):
+    print(f'{message.from_user.first_name} not registered and started')
+    global preview, user_choices
+    user_choices[message.from_user.id] = ['0']
+    preview[message.from_user.id] = False
+    bot.send_message(message.from_user.id, "Welcome to PixelBot. "
+                                           "I can apply effects to your images: make them look like a pixel art or add some fancy glitches."
+                                           " You can also try drawing-like effects, inspired by Acerola's YT videos."
+                                           " Formats such as PNG and JPG work best, consider converting your files beforehand."
+                                           " You can resend files to me. Use menu button to view options.")
 
 
 @bot.message_handler(commands=['help'])
@@ -473,6 +512,34 @@ def send_brokendrawing(message):
     bot.send_message(message.from_user.id, "Send me a photo as a file.", reply_markup=markup)
 
 
+@bot.message_handler(commands=['blacklines'])
+def send_blacklines(message):
+    markup = types.ReplyKeyboardRemove(selective=False)
+    print(f'{message.from_user.first_name} chose black-lines')
+    global user_choices
+    user_choices[message.from_user.id] = ['4']
+    bot.send_message(message.from_user.id, "Send me a photo as a file.", reply_markup=markup)
+
+
+@bot.message_handler(commands=['transparentlines'])
+def send_transparentlines(message):
+    markup = types.ReplyKeyboardRemove(selective=False)
+    print(f'{message.from_user.first_name} chose trans-lines')
+    global user_choices
+    user_choices[message.from_user.id] = ['5']
+    bot.send_message(message.from_user.id, "Send me a photo as a file.", reply_markup=markup)
+
+
+@bot.message_handler(commands=['glitch'])
+def send_glitch(message):
+    markup = types.ReplyKeyboardRemove(selective=False)
+    print(f'{message.from_user.first_name} chose glitch')
+    global user_choices
+    user_choices[message.from_user.id] = ['6']
+    bot.send_message(message.from_user.id, "Send me a photo as a file.", reply_markup=markup)
+
+
+
 @bot.message_handler(func=lambda message: user_choices[message.from_user.id][0] ==
                                           '1' and message.content_type == 'text' and message.text in palettes and preview[message.from_user.id])
 def show_preview(message):
@@ -494,12 +561,12 @@ def show_preview(message):
         markup.row(types.KeyboardButton('Back to choosing.'))
         bot.send_message(message.from_user.id, "This is a preview of chosen palette:", reply_markup=markup)
         p = io.imread('palettes/'+message.text+'.png')
-        pr = upscale(p, factor=10)
-        io.imsave(message.text+'preview.jpg', pr)
-        photo = open(message.text+'preview.jpg', 'rb')
-        bot.send_photo(message.chat.id, photo)
+        pr = upscale(p, factor=100)
+        io.imsave(message.text+'preview.png', pr)
+        photo = open(message.text+'preview.png', 'rb')#open(message.text+'preview.png', 'rb')
+        bot.send_document(message.from_user.id, photo)
         photo.close()
-        os.remove(message.text+'preview.jpg')
+        os.remove(message.text+'preview.png')
 
 
 @bot.message_handler(func=lambda message: user_choices[message.from_user.id][0] ==
@@ -515,7 +582,7 @@ def send_palettechoice(message):
 
 @bot.message_handler(func=lambda message: user_choices[message.from_user.id][0] ==
                                           '1' and message.content_type == 'text' and message.text == 'Back to choosing.' and preview[message.from_user.id] == False)
-def send_palettechoice(message):
+def send_back(message):
     print(f'{message.from_user.first_name} back to choosing')
     global preview
     preview[message.from_user.id] = True
@@ -525,8 +592,8 @@ def send_palettechoice(message):
     for i in range(len(palettes)):
         markup.row(types.KeyboardButton(palettes[i]))
     bot.send_message(message.from_user.id, "Choose a specific colour "
-                                           "palette from below or a standard color quantization algorithm (none):",
-                     reply_markup=markup)
+                                           "palette from below or a standard color quantization algorithm (none) using buttons. "
+                                           "A preview of a colour palette will be sent as PNG file afterwards.", reply_markup=markup)
 
 
 @bot.message_handler(func=lambda message: user_choices[message.from_user.id][0] == '1' and len(
@@ -562,7 +629,8 @@ def send_options(message):
     for i in range(len(palettes)):
         markup.row(types.KeyboardButton(palettes[i]))
     bot.send_message(message.from_user.id, "Choose a specific colour "
-                                           "palette from below or a standard color quantization algorithm (none):", reply_markup=markup)
+                                           "palette from below or a standard color quantization algorithm (none) using buttons. "
+                                           "A preview of a colour palette will be sent as PNG file afterwards.", reply_markup=markup)
 
 
 @bot.message_handler(content_types=['document'])
@@ -574,7 +642,7 @@ def process_image(message):
 
     #file = requests.get('https://api.telegram.org/file/bot{0}/{1}'.format("5802386456:AAG73F64Z0hathHLSF8QYeud-UVnubCpuFM", file_info.file_path))
     bot.send_message(message.from_user.id, "Processing image...", reply_markup=markup)
-    p = io.imread('https://api.telegram.org/file/bot{0}/{1}'.format("5802386456:AAG73F64Z0hathHLSF8QYeud-UVnubCpuFM", file_info.file_path))
+    p = io.imread('https://api.telegram.org/file/bot{0}/{1}'.format("TOKEN", file_info.file_path))
     #io.imshow(p)
     done = False
     res = np.zeros_like(p)
@@ -610,6 +678,15 @@ def process_image(message):
             done = True
     elif configuration[0] == '2':
         res = process_img_drawing(p)
+        done = True
+    elif configuration[0] == '4':
+        res = vhslike(p)
+        done = True
+    elif configuration[0] == '5':
+        res = vhslikefact(p)
+        done = True
+    elif configuration[0] == '6':
+        res = layer(p, int(p.shape[1]//100+1))
         done = True
     else:
         #mode = 3
