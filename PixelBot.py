@@ -423,7 +423,7 @@ palettes = ['none (Bayer4x4 algorithm)', 'aap', 'apollo', 'blessing', 'endesga64
 
 preview = {}
 
-bot = telebot.TeleBot("5802386456:AAG73F64Z0hathHLSF8QYeud-UVnubCpuFM", parse_mode=None) # You can set parse_mode by default. HTML or MARKDOWN
+bot = telebot.TeleBot("TOKEN", parse_mode=None) # You can set parse_mode by default. HTML or MARKDOWN
 
 
 @bot.message_handler(func=lambda message: message.from_user.id not in user_choices)
